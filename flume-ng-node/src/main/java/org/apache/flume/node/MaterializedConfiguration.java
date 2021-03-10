@@ -29,6 +29,8 @@ import com.google.common.collect.ImmutableMap;
  * MaterializedConfiguration represents the materialization of a Flume
  * properties file. That is it's the actual Source, Sink, and Channels
  * represented in the configuration file.
+ *
+ * MaterializedConfiguration表示Flume属性文件的物化。也就是说，它是配置文件中表示的实际源、接收器和通道。
  */
 public interface MaterializedConfiguration {
 

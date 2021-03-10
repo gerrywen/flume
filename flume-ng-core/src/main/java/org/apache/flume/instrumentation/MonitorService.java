@@ -26,6 +26,8 @@ import org.apache.flume.conf.Configurable;
  * and the class name should be passed in during startup, with any additional
  * context it requires.
  */
+// 在Application 类中，还定义了监控服务对象，用于监控agent，该服务也是根据配置文件信息进行初始化的。
+// 如果不配置，则没有监控信息。Flume官方建议使用GangliaServer类，通过Ganglia进行监控。
 public interface MonitorService extends Configurable {
 
   public void start();

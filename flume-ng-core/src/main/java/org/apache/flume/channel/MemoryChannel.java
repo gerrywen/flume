@@ -43,10 +43,15 @@ import java.util.concurrent.TimeUnit;
  * writing to disk is impractical is required or durability of data is not
  * required.
  * </p>
+ *
+ * 当需要磁盘写入速度不实际或不需要数据持久性时，推荐使用MemoryChannel。
+ *
  * <p>
  * Additionally, MemoryChannel should be used when a channel is required for
  * unit testing purposes.
  * </p>
+ *
+ * 此外，当单元测试需要通道时，应该使用MemoryChannel。
  */
 @InterfaceAudience.Public
 @InterfaceStability.Stable
@@ -62,10 +67,15 @@ public class MemoryChannel extends BasicChannelSemantics implements TransactionC
   private static final Integer defaultKeepAlive = 3;
 
   private class MemoryTransaction extends BasicTransactionSemantics {
+    // channel->sink 写入双端队列
     private LinkedBlockingDeque<Event> takeList;
+    // source->channel 写入双端队列
     private LinkedBlockingDeque<Event> putList;
+    // Map<String, AtomicLong>统计
     private final ChannelCounter channelCounter;
+    // 写入字节数
     private int putByteCounter = 0;
+    // 取出字节数
     private int takeByteCounter = 0;
 
     public MemoryTransaction(int transCapacity, ChannelCounter counter) {
@@ -75,11 +85,15 @@ public class MemoryChannel extends BasicChannelSemantics implements TransactionC
       channelCounter = counter;
     }
 
+    // 写入数据
     @Override
     protected void doPut(Event event) throws InterruptedException {
+      // channel.event.put.attempt
       channelCounter.incrementEventPutAttemptCount();
+      // 预估字节大小
       int eventByteSize = (int) Math.ceil(estimateEventSize(event) / byteCapacitySlotSize);
 
+      // 写入put双端队列
       if (!putList.offer(event)) {
         throw new ChannelException(
             "Put queue for MemoryTransaction of capacity " +
@@ -89,23 +103,28 @@ public class MemoryChannel extends BasicChannelSemantics implements TransactionC
       putByteCounter += eventByteSize;
     }
 
+    // 取出数据
     @Override
     protected Event doTake() throws InterruptedException {
+      // channel.event.take.attempt
       channelCounter.incrementEventTakeAttemptCount();
       if (takeList.remainingCapacity() == 0) {
         throw new ChannelException("Take list for MemoryTransaction, capacity " +
             takeList.size() + " full, consider committing more frequently, " +
             "increasing capacity, or increasing thread count");
       }
+      // 尝试3秒内获得了许可
       if (!queueStored.tryAcquire(keepAlive, TimeUnit.SECONDS)) {
         return null;
       }
+      // 从putList取出数据
       Event event;
       synchronized (queueLock) {
         event = queue.poll();
       }
       Preconditions.checkNotNull(event, "Queue.poll returned NULL despite semaphore " +
           "signalling existence of entry");
+      // 放入take
       takeList.put(event);
 
       int eventByteSize = (int) Math.ceil(estimateEventSize(event) / byteCapacitySlotSize);
@@ -114,6 +133,7 @@ public class MemoryChannel extends BasicChannelSemantics implements TransactionC
       return event;
     }
 
+    // 提交数据
     @Override
     protected void doCommit() throws InterruptedException {
       int remainingChange = takeList.size() - putList.size();
@@ -132,6 +152,7 @@ public class MemoryChannel extends BasicChannelSemantics implements TransactionC
       }
       int puts = putList.size();
       int takes = takeList.size();
+      // 处理putList数据提交到队列
       synchronized (queueLock) {
         if (puts > 0) {
           while (!putList.isEmpty()) {
@@ -161,6 +182,7 @@ public class MemoryChannel extends BasicChannelSemantics implements TransactionC
       channelCounter.setChannelSize(queue.size());
     }
 
+    // 数据回滚，返回队列
     @Override
     protected void doRollback() {
       int takes = takeList.size();
@@ -184,8 +206,11 @@ public class MemoryChannel extends BasicChannelSemantics implements TransactionC
 
   // lock to guard queue, mainly needed to keep it locked down during resizes
   // it should never be held through a blocking operation
+  // 锁定保护队列，主要需要在调整大小时将其锁定
+  //它不应该通过阻塞操作被持有
   private Object queueLock = new Object();
 
+  // doCommit提交数据queue.offer(putList.removeFirst())
   @GuardedBy(value = "queueLock")
   private LinkedBlockingDeque<Event> queue;
 
@@ -201,12 +226,17 @@ public class MemoryChannel extends BasicChannelSemantics implements TransactionC
   private Semaphore queueStored;
 
   // maximum items in a transaction queue
+  // 事务队列中的最大项, 默认100
   private volatile Integer transCapacity;
+  // 默认3秒
   private volatile int keepAlive;
+  // 根据runtime内存计算
   private volatile int byteCapacity;
   private volatile int lastByteCapacity;
+  // 默认20
   private volatile int byteCapacityBufferPercentage;
   private Semaphore bytesRemaining;
+  // Map<String, AtomicLong>统计
   private ChannelCounter channelCounter;
 
   public MemoryChannel() {
@@ -221,6 +251,7 @@ public class MemoryChannel extends BasicChannelSemantics implements TransactionC
    * <li>byteCapacityBufferPercentage = type int that defines the percent of buffer between byteCapacity and the estimated event size.
    * <li>keep-alive = type int that defines the number of second to wait for a queue permit
    */
+  // 读取配置信息
   @Override
   public void configure(Context context) {
     Integer capacity = null;
@@ -280,6 +311,7 @@ public class MemoryChannel extends BasicChannelSemantics implements TransactionC
 
     if (queue != null) {
       try {
+        // 自动扩容队列
         resizeQueue(capacity);
       } catch (InterruptedException e) {
         Thread.currentThread().interrupt();
@@ -318,6 +350,11 @@ public class MemoryChannel extends BasicChannelSemantics implements TransactionC
     }
   }
 
+  /**
+   * 自动扩容队列
+   * @param capacity
+   * @throws InterruptedException
+   */
   private void resizeQueue(int capacity) throws InterruptedException {
     int oldCapacity;
     synchronized (queueLock) {
@@ -348,8 +385,11 @@ public class MemoryChannel extends BasicChannelSemantics implements TransactionC
 
   @Override
   public synchronized void start() {
+    // 启动监控统计
     channelCounter.start();
+    // 设置channel.current.size统计初始数量为队列大小
     channelCounter.setChannelSize(queue.size());
+    // 设置channel.capacity统计初始数量为队列大小+队列剩余容量
     channelCounter.setChannelCapacity(Long.valueOf(
             queue.size() + queue.remainingCapacity()));
     super.start();
@@ -357,7 +397,9 @@ public class MemoryChannel extends BasicChannelSemantics implements TransactionC
 
   @Override
   public synchronized void stop() {
+    // 设置channel.current.size统计数量为队列大小
     channelCounter.setChannelSize(queue.size());
+    // 停止监控相关统计
     channelCounter.stop();
     super.stop();
   }
@@ -367,6 +409,7 @@ public class MemoryChannel extends BasicChannelSemantics implements TransactionC
     return new MemoryTransaction(transCapacity, channelCounter);
   }
 
+  // 预估消息体字节大小
   private long estimateEventSize(Event event) {
     byte[] body = event.getBody();
     if (body != null && body.length != 0) {
@@ -376,6 +419,7 @@ public class MemoryChannel extends BasicChannelSemantics implements TransactionC
     return 1;
   }
 
+  // availablePermits（）返回此Semaphore对象中当前可用的许可数，许可的数量有可能实时在改变，并不是固定的数量。
   @VisibleForTesting
   int getBytesRemainingValue() {
     return bytesRemaining.availablePermits();

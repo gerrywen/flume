@@ -168,6 +168,9 @@ final class FlumeEventQueue {
    * Add a FlumeEventPointer to the head of the queue.
    * Called during rollbacks.
    *
+   * 将FlumeEventPointer添加到队列的头部。
+   * 在回滚。
+   *
    * @param FlumeEventPointer to be added
    * @return true if space was available and pointer was
    * added to the queue
@@ -196,6 +199,8 @@ final class FlumeEventQueue {
   /**
    * Add a FlumeEventPointer to the tail of the queue.
    *
+   * 将FlumeEventPointer添加到队列尾部。
+   *
    * @param FlumeEventPointer to be added
    * @return true if space was available and pointer
    * was added to the queue
@@ -216,6 +221,8 @@ final class FlumeEventQueue {
   /**
    * Must be called when a put happens to the log. This ensures that put commits
    * after checkpoints will retrieve all events committed in that txn.
+   *
+   * 必须在日志中发生put时调用。这确保在检查点之后的put提交将检索在txn中提交的所有事件。
    *
    * @param e
    * @param transactionID
@@ -331,6 +338,8 @@ final class FlumeEventQueue {
   /**
    * Must be called when a transaction is being committed or rolled back.
    *
+   * 必须在提交或回滚事务时调用。
+   *
    * @param transactionID
    */
   synchronized void completeTransaction(long transactionID) {
@@ -436,6 +445,8 @@ final class FlumeEventQueue {
    * A representation of in flight events which have not yet been committed.
    * None of the methods are thread safe, and should be called from thread
    * safe methods only.
+   *
+   * 一种尚未提交的flight事件的表示。这些方法都不是线程安全的，只能从线程安全的方法中调用。
    */
   class InflightEventWrapper {
     private SetMultimap<Long, Long> inflightEvents = HashMultimap.create();
@@ -446,6 +457,7 @@ final class FlumeEventQueue {
     private final MessageDigest digest;
     private final File inflightEventsFile;
     private volatile boolean syncRequired = false;
+    // <transactionID,FileID>
     private SetMultimap<Long, Integer> inflightFileIDs = HashMultimap.create();
 
     public InflightEventWrapper(File inflightEventsFile) throws Exception {
@@ -463,6 +475,8 @@ final class FlumeEventQueue {
     /**
      * Complete the transaction, and remove all events from inflight list.
      *
+     * 完成事务，并从inflight列表中删除所有事件。1
+     *
      * @param transactionID
      */
     public boolean completeTransaction(Long transactionID) {
@@ -477,6 +491,8 @@ final class FlumeEventQueue {
 
     /**
      * Add an event pointer to the inflights list.
+     *
+     * 在inflights列表中添加一个事件指针。
      *
      * @param transactionID
      * @param pointer

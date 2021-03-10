@@ -23,6 +23,9 @@ package org.apache.flume.channel.file;
  * Pointer to an Event on disk. This is represented in memory
  * as a long. As such there are methods to convert from this
  * object to a long and from a long to this object.
+ *
+ * 指向磁盘上事件的指针。这在内存中表示为一个长。
+ * 因此，有一些方法可以将这个对象转换为long对象，也可以将long对象转换为这个对象。
  */
 class FlumeEventPointer {
   private final int fileID;

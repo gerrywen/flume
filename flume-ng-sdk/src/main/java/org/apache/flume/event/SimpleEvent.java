@@ -24,6 +24,7 @@ import java.util.Map;
 
 import org.apache.flume.Event;
 
+// 简单事件
 public class SimpleEvent implements Event {
 
   private Map<String, String> headers;

@@ -59,9 +59,15 @@ public interface Channel extends LifecycleAware, NamedComponent {
 
   /**
    * <p>Puts the given event into the channel.</p>
+   *
+   * 将给定的事件放入通道。
+   *
    * <p><strong>Note</strong>: This method must be invoked within an active
    * {@link Transaction} boundary. Failure to do so can lead to unpredictable
    * results.</p>
+   *
+   * 该方法必须在活动的{@link Transaction}边界内调用。如果不这样做，可能会导致不可预测的结果。
+   *
    * @param event the event to transport.
    * @throws ChannelException in case this operation fails.
    * @see org.apache.flume.Transaction#begin()
@@ -71,10 +77,16 @@ public interface Channel extends LifecycleAware, NamedComponent {
   /**
    * <p>Returns the next event from the channel if available. If the channel
    * does not have any events available, this method must return {@code null}.
+   *
+   * 如果通道可用，则返回下一个事件。如果通道没有任何可用的事件，则此方法必须返回null.
+   *
    * </p>
    * <p><strong>Note</strong>: This method must be invoked within an active
    * {@link Transaction} boundary. Failure to do so can lead to unpredictable
    * results.</p>
+   *
+   * 该方法必须在活动的{@link Transaction}边界内调用。如果不这样做，可能会导致不可预测的结果。
+   *
    * @return the next available event or {@code null} if no events are
    * available.
    * @throws ChannelException in case this operation fails.

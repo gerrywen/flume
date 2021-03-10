@@ -24,6 +24,8 @@ import org.apache.flume.annotations.InterfaceStability;
 /**
  * Enables a component to be tagged with a name so that it can be referred
  * to uniquely within the configuration system.
+ *
+ * 允许用名称标记组件，以便可以在配置系统中惟一地引用它。
  */
 @InterfaceAudience.Public
 @InterfaceStability.Stable

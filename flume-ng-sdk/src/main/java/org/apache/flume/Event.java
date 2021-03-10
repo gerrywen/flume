@@ -24,6 +24,9 @@ import java.util.Map;
 /**
  * Basic representation of a data object in Flume.
  * Provides access to data as it flows through the system.
+ *
+ * 数据对象在Flume中的基本表示形式。
+ * 提供对流经系统的数据的访问。
  */
 public interface Event {
 

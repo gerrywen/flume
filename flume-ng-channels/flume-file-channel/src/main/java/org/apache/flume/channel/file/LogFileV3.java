@@ -136,6 +136,8 @@ public class LogFileV3 extends LogFile {
    * Writes a GeneratedMessage to a temp file, synchronizes it to disk
    * and then renames the file over file.
    *
+   * 将生成的消息写入临时文件，将其同步到磁盘，然后逐个文件重命名该文件。
+   *
    * @param msg  GeneratedMessage to write to the file
    * @param file destination file
    * @throws IOException if a write error occurs or the File.renameTo

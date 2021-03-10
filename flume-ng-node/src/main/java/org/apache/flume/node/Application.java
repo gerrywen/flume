@@ -63,9 +63,12 @@ public class Application {
   public static final String CONF_MONITOR_CLASS = "flume.monitoring.type";
   public static final String CONF_MONITOR_PREFIX = "flume.monitoring.";
 
+  // 生命周期
   private final List<LifecycleAware> components;
+  // 生命周期管理
   private final LifecycleSupervisor supervisor;
   private MaterializedConfiguration materializedConfiguration;
+  // 用于监控agent
   private MonitorService monitorServer;
   private final ReentrantLock lifecycleLock = new ReentrantLock();
 
@@ -249,6 +252,7 @@ public class Application {
 
   }
 
+  // 通过commons-cli解析命令行参数，并获取配置文件路径。
   public static void main(String[] args) {
 
     try {
@@ -292,6 +296,7 @@ public class Application {
       }
 
       String agentName = commandLine.getOptionValue('n');
+      // 根据命令行参数no-reload-conf判断是否需要开启自动加载功能，不加该参数，默认为开启自动加载。
       boolean reload = !commandLine.hasOption("no-reload-conf");
 
       boolean isZkConfigured = false;
@@ -322,6 +327,7 @@ public class Application {
           application.handleConfigurationEvent(zookeeperConfigurationProvider.getConfiguration());
         }
       } else {
+        // 默认文件模式
         File configurationFile = new File(commandLine.getOptionValue('f'));
 
         /*
@@ -343,10 +349,13 @@ public class Application {
                 "The specified configuration file does not exist: " + path);
           }
         }
+        // 生命周期
         List<LifecycleAware> components = Lists.newArrayList();
 
         if (reload) {
+          // 用到了Guava EventBus的发布订阅功能。将Application 注册到EventBus。
           EventBus eventBus = new EventBus(agentName + "-event-bus");
+          // 拉取配置文件属性,传入信息到构造函数
           PollingPropertiesFileConfigurationProvider configurationProvider =
               new PollingPropertiesFileConfigurationProvider(
                   agentName, configurationFile, eventBus, 30);
@@ -354,6 +363,7 @@ public class Application {
           application = new Application(components);
           eventBus.register(application);
         } else {
+          // 如果不是自动加载更新，调用一次。configurationFile客户的传入的-f的配置文件
           PropertiesFileConfigurationProvider configurationProvider =
               new PropertiesFileConfigurationProvider(agentName, configurationFile);
           application = new Application();
@@ -362,6 +372,7 @@ public class Application {
       }
       application.start();
 
+      // 退出是指ctrl+c或者kill -15，但如果用kill -9，就无法触发hook。
       final Application appReference = application;
       Runtime.getRuntime().addShutdownHook(new Thread("agent-shutdown-hook") {
         @Override

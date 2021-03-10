@@ -60,6 +60,7 @@ public class SinkGroup implements Configurable, ConfigurableComponent {
 
   @Override
   public void configure(ComponentConfiguration conf) {
+    // 获取配置信息
     this.conf = (SinkGroupConfiguration) conf;
     processor =
         SinkProcessorFactory.getProcessor(this.conf.getProcessorContext(),

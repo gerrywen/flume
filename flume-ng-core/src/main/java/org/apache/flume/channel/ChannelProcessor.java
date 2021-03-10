@@ -87,12 +87,15 @@ public class ChannelProcessor implements Configurable {
 
     List<Interceptor> interceptors = Lists.newLinkedList();
 
+    //获取拦截器
     String interceptorListStr = context.getString("interceptors", "");
     if (interceptorListStr.isEmpty()) {
       return;
     }
+    //解析成拦截器名的数组
     String[] interceptorNames = interceptorListStr.split("\\s+");
 
+    //获取interceptors的Context
     Context interceptorContexts =
         new Context(context.getSubProperties("interceptors."));
 
@@ -101,6 +104,8 @@ public class ChannelProcessor implements Configurable {
     for (String interceptorName : interceptorNames) {
       Context interceptorContext = new Context(
           interceptorContexts.getSubProperties(interceptorName + "."));
+      //得到拦截器的类型，Flume支持TIMESTAMP， HOST，  STATIC，  REGEX_FILTER，  REGEX_EXTRACTOR，  SEARCH_REPLACE
+      //定义在org.apache.flume.interceptor.InterceptorType类中。
       String type = interceptorContext.getString("type");
       if (type == null) {
         LOG.error("Type not specified for interceptor " + interceptorName);
@@ -108,6 +113,7 @@ public class ChannelProcessor implements Configurable {
             interceptorName);
       }
       try {
+        //实例化拦截器，并存放到List中
         Interceptor.Builder builder = factory.newInstance(type);
         builder.configure(interceptorContext);
         interceptors.add(builder.build());
@@ -122,7 +128,7 @@ public class ChannelProcessor implements Configurable {
         throw new FlumeException("Unable to access Interceptor.Builder.", e);
       }
     }
-
+    //将拦截器List设置到拦截链中。
     interceptorChain.setInterceptors(interceptors);
   }
 
@@ -145,15 +151,20 @@ public class ChannelProcessor implements Configurable {
   public void processEventBatch(List<Event> events) {
     Preconditions.checkNotNull(events, "Event list must not be null");
 
+    // 1.首先events会在interceptorChain中intercept处理，比如在头部加时间戳等
     events = interceptorChain.intercept(events);
 
+    // 2.新建了两个channelQueue的map，这两个map一个是必须的channel，
+    // 另一个是可选的channel，map的类型是linkedHashMap，说明是有序的。
     Map<Channel, List<Event>> reqChannelQueue =
         new LinkedHashMap<Channel, List<Event>>();
 
     Map<Channel, List<Event>> optChannelQueue =
         new LinkedHashMap<Channel, List<Event>>();
 
+    // 3.遍历events,根据selector和event确定event要发送到哪些channel
     for (Event event : events) {
+      // 4.遍历reqChannels，把event放到对应的channel的eventlist中
       List<Channel> reqChannels = selector.getRequiredChannels(event);
 
       for (Channel ch : reqChannels) {
@@ -165,6 +176,7 @@ public class ChannelProcessor implements Configurable {
         eventQueue.add(event);
       }
 
+      // 5.遍历optChannels，把event放到对应的channel的eventlist中
       List<Channel> optChannels = selector.getOptionalChannels(event);
 
       for (Channel ch : optChannels) {
@@ -178,6 +190,9 @@ public class ChannelProcessor implements Configurable {
       }
     }
 
+    // 6.遍历reqMap的key，获取channel中transaction对象，
+    // 开启事务，把map中channel对应的events放到channel中，都放进去后，会提交事务。
+    // 如果有错误的话，事务会进行回滚。最后，会关闭事务。
     // Process required channels
     for (Channel reqChannel : reqChannelQueue.keySet()) {
       Transaction tx = reqChannel.getTransaction();
@@ -210,6 +225,7 @@ public class ChannelProcessor implements Configurable {
       }
     }
 
+    // 7.和上面相同方式处理optMap
     // Process optional channels
     for (Channel optChannel : optChannelQueue.keySet()) {
       Transaction tx = optChannel.getTransaction();

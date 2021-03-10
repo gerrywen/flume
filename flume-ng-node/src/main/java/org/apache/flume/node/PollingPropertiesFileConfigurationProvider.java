@@ -32,6 +32,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.eventbus.EventBus;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
+// 本身职责是自动加载配置文件。当修改了配置文件后，不需要手动重启agent，Flume会自动重新加载配置文件。
 public class PollingPropertiesFileConfigurationProvider
     extends PropertiesFileConfigurationProvider
     implements LifecycleAware {
@@ -57,6 +58,7 @@ public class PollingPropertiesFileConfigurationProvider
     lifecycleState = LifecycleState.IDLE;
   }
 
+  // 集成生命周期管理  开始
   @Override
   public void start() {
     LOGGER.info("Configuration provider starting");
@@ -68,6 +70,7 @@ public class PollingPropertiesFileConfigurationProvider
             new ThreadFactoryBuilder().setNameFormat("conf-file-poller-%d")
                 .build());
 
+    // 监听文件变化线程
     FileWatcherRunnable fileWatcherRunnable =
         new FileWatcherRunnable(file, counterGroup);
 
@@ -79,6 +82,7 @@ public class PollingPropertiesFileConfigurationProvider
     LOGGER.debug("Configuration provider started");
   }
 
+  // 生命周期管理 暂停
   @Override
   public void stop() {
     LOGGER.info("Configuration provider stopping");
@@ -112,6 +116,8 @@ public class PollingPropertiesFileConfigurationProvider
         + getClass().getCanonicalName() + " agentName:" + getAgentName() + " }";
   }
 
+  // 创建了一个FileWatcherRunnable内部类线程，该线程每隔30秒会检测配置文件是否发生变化，
+  // 如果发生变化，会将新的配置信息发布到EventBus。
   public class FileWatcherRunnable implements Runnable {
 
     private final File file;
@@ -132,6 +138,7 @@ public class PollingPropertiesFileConfigurationProvider
 
       counterGroup.incrementAndGet("file.checks");
 
+      // 记录文件最后修改的信息
       long lastModified = file.lastModified();
 
       if (lastModified > lastChange) {
@@ -142,6 +149,7 @@ public class PollingPropertiesFileConfigurationProvider
         lastChange = lastModified;
 
         try {
+          // 发布信息给订阅者，getConfiguration方法，完成配置文件的加载和组件的实例化
           eventBus.post(getConfiguration());
         } catch (Exception e) {
           LOGGER.error("Failed to load configuration data. Exception follows.",

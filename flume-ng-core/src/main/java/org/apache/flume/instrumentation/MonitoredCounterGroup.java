@@ -70,6 +70,7 @@ public abstract class MonitoredCounterGroup {
       counterInitMap.put(attribute, new AtomicLong(0L));
     }
 
+    // 不可更改的map
     counterMap = Collections.unmodifiableMap(counterInitMap);
 
     startTime = new AtomicLong(0L);
@@ -83,14 +84,22 @@ public abstract class MonitoredCounterGroup {
    * Initializes the values for the stop time as well as all the keys in the
    * internal map to zero and sets the start time to the current time in
    * milliseconds since midnight January 1, 1970 UTC
+   *
+   * 启动组件
+   *
+   * 将停止时间以及内部映射中的所有键的值初始化为0，
+   * 并将开始时间设置为UTC 1970年1月1日午夜以来的当前时间(以毫秒为单位)
    */
   public void start() {
 
     register();
+    // 结束时间
     stopTime.set(0L);
+    // 遍历初始化为0
     for (String counter : counterMap.keySet()) {
       counterMap.get(counter).set(0L);
     }
+    // 开始时间
     startTime.set(System.currentTimeMillis());
     logger.info("Component type: " + type + ", name: " + name + " started");
   }
@@ -99,6 +108,8 @@ public abstract class MonitoredCounterGroup {
    * Registers the counter.
    * This method is exposed only for testing, and there should be no need for
    * any implementations to call this method directly.
+   *
+   * 注册统计。此方法仅在测试时公开，任何实现都不需要直接调用此方法。
    */
   @VisibleForTesting
   void register() {
@@ -128,11 +139,15 @@ public abstract class MonitoredCounterGroup {
 
   /**
    * Shuts Down the Component
+   * 关闭组件
    *
    * Used to indicate that the component is shutting down.
+   * 用于指示组件正在关闭。
    *
    * Sets the stop time and then prints out the metrics from
    * the internal map of keys to values for the following components:
+   *
+   * 设置停止时间，然后打印出以下组件的键到值的内部映射的度量:
    *
    * - ChannelCounter
    * - ChannelProcessorCounter
@@ -143,12 +158,14 @@ public abstract class MonitoredCounterGroup {
   public void stop() {
 
     // Sets the stopTime for the component as the current time in milliseconds
+    // 将组件的stopTime设置为当前时间，以毫秒为单位
     stopTime.set(System.currentTimeMillis());
 
     // Prints out a message indicating that this component has been stopped
     logger.info("Component type: " + type + ", name: " + name + " stopped");
 
     // Retrieve the type for this counter group
+    // 检索此计数器组的类型
     final String typePrefix = type.name().toLowerCase(Locale.ENGLISH);
 
     // Print out the startTime for this component
@@ -164,6 +181,7 @@ public abstract class MonitoredCounterGroup {
         + " == " + stopTime);
 
     // Retrieve and sort counter group map keys
+    // 检索和排序计数器组映射键
     final List<String> mapKeys = new ArrayList<String>(counterMap.keySet());
 
     Collections.sort(mapKeys);
@@ -172,6 +190,7 @@ public abstract class MonitoredCounterGroup {
     for (final String counterMapKey : mapKeys) {
 
       // Retrieves the value from the original counterMap.
+      // 从原始反映射中检索值。
       final long counterMapValue = get(counterMapKey);
 
       logger.info("Shutdown Metric for type: " + type + ", "
@@ -183,6 +202,8 @@ public abstract class MonitoredCounterGroup {
   /**
    * Returns when this component was first started
    *
+   * 当这个组件第一次启动时返回
+   *
    * @return
    */
   public long getStartTime() {
@@ -191,6 +212,8 @@ public abstract class MonitoredCounterGroup {
 
   /**
    * Returns when this component was stopped
+   *
+   * 当组件停止时返回
    *
    * @return
    */
@@ -221,6 +244,7 @@ public abstract class MonitoredCounterGroup {
 
   /**
    * Retrieves the current value for this key
+   * 检索此键的当前值
    *
    * @param counter The key for this metric
    * @return The current value for this key
@@ -232,6 +256,8 @@ public abstract class MonitoredCounterGroup {
   /**
    * Sets the value for this key to the given value
    *
+   * 将此键的值设置为给定的值
+   *
    * @param counter The key for this metric
    * @param value The new value for this key
    */
@@ -241,6 +267,8 @@ public abstract class MonitoredCounterGroup {
 
   /**
    * Atomically adds the delta to the current value for this key
+   *
+   * 原子将增量添加到该键的当前值
    *
    * @param counter The key for this metric
    * @param delta
@@ -253,6 +281,8 @@ public abstract class MonitoredCounterGroup {
   /**
    * Atomically increments the current value for this key by one
    *
+   * 原子地将该键的当前值加1
+   *
    * @param counter The key for this metric
    * @return The updated value for this key
    */
@@ -263,8 +293,12 @@ public abstract class MonitoredCounterGroup {
   /**
    * Component Enum Constants
    *
+   * 组件枚举常量
+   *
    * Used by each component's constructor to distinguish which type the
    * component is.
+   *
+   * 由每个组件的构造函数来区分组件的类型。
    */
   public static enum Type {
     SOURCE,

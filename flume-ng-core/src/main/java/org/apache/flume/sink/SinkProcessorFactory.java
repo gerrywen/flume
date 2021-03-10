@@ -44,9 +44,14 @@ public class SinkProcessorFactory {
    * Creates a sink processor and configures it using the provided context
    * </p>
    *
+   * 创建接收器处理器并使用提供的上下文对其进行配置
+   *
    * @param context Context limited to that of the processor. Should include type
    * and any settings relevant to that processor type. Referer to javadoc for
    * specific sink
+   *
+   *  上下文仅限于处理器的上下文。应该包括类型和与该处理器类型相关的任何设置。关于特定的接收器，请参考javadoc
+   *
    * @param sinks A non-null, non-empty list of sinks to be assigned to the
    *  processor
    * @return A configured SinkProcessor

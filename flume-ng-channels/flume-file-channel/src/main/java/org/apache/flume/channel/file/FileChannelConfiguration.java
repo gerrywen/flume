@@ -21,11 +21,13 @@ package org.apache.flume.channel.file;
 public class FileChannelConfiguration {
   /**
    * Directory Checkpoints will be written in
+   * 目录检查点将写入
    */
   public static final String CHECKPOINT_DIR = "checkpointDir";
 
   /**
    * The directory to which the checkpoint must be backed up
+   * 检查点必须备份到的目录
    */
   public static final String BACKUP_CHECKPOINT_DIR = "backupCheckpointDir";
 
@@ -33,6 +35,8 @@ public class FileChannelConfiguration {
    * Directories data files will be written in. Multiple directories
    * can be specified as comma separated values. Writes will
    * be written in a round robin fashion.
+   *
+   * 目录数据文件将写入。可以指定多个目录，用逗号分隔。写操作将以循环方式进行。
    */
   public static final String DATA_DIRS = "dataDirs";
   /**

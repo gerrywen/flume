@@ -56,6 +56,10 @@ import java.util.concurrent.atomic.AtomicLong;
  * Internal API intended for HDFSSink use.
  * This class does file rolling and handles file formats and serialization.
  * Only the public methods in this class are thread safe.
+ *
+ * 用于hdfsink的内部API。
+ * 这个类执行文件滚动并处理文件格式和序列化。
+ * 只有该类中的公共方法是线程安全的。
  */
 class BucketWriter {
 
@@ -532,6 +536,11 @@ class BucketWriter {
    * We rotate before append, and not after, so that the active file rolling
    * mechanism will never roll an empty file. This also ensures that the file
    * creation time reflects when the first event was written.
+   *
+   * 打开文件句柄，写数据，更新统计，句柄文件滚动和批刷新。
+   * 如果写入失败，文件将隐式关闭，然后重新抛出IOException。
+   * 我们在追加之前而不是追加之后进行回滚，以便活动文件滚动机制永远不会滚动空文件。
+   * 这还可以确保文件创建时间反映第一个事件写入的时间。
    *
    * @throws IOException
    * @throws InterruptedException

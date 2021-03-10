@@ -64,6 +64,10 @@ import java.util.concurrent.locks.ReentrantReadWriteLock.WriteLock;
  * Stores FlumeEvents on disk and pointers to the events in a in memory queue.
  * Once a log object is created the replay method should be called to reconcile
  * the on disk write ahead log with the last checkpoint of the queue.
+ *
+ * 将FlumeEvents存储在磁盘上，并将指向事件的指针存储在内存队列中。
+ * 一旦创建了日志对象，就应该调用重播方法，使磁盘上的提前写日志与队列的最后一个检查点一致。
+ *
  * <p>
  * Before calling any of commitPut/commitTake/get/put/rollback/take
  * {@linkplain org.apache.flume.channel.file.Log#lockShared()}
@@ -207,6 +211,7 @@ public class Log {
       return this;
     }
 
+    // 设置日志文件夹
     Builder setLogDirs(File[] dirs) {
       bLogDirs = dirs;
       return this;
@@ -272,7 +277,9 @@ public class Log {
       return this;
     }
 
+    // 将configure方法获取到的参数，set到Builder对象
     Log build() throws IOException {
+      // 初始化构造函数
       return new Log(bCheckpointInterval, bMaxFileSize, bQueueCapacity,
           bUseDualCheckpoints, bCompressBackupCheckpoint, bCheckpointDir,
           bBackupCheckpointDir, bName, useLogReplayV1, useFastReplay,
@@ -376,9 +383,11 @@ public class Log {
     this.channelCounter = channelCounter;
 
     logFiles = new AtomicReferenceArray<LogFile.Writer>(this.logDirs.length);
+    // 实现定时任务
     workerExecutor = Executors.newSingleThreadScheduledExecutor(new
         ThreadFactoryBuilder().setNameFormat("Log-BackgroundWorker-" + name)
         .build());
+    // 默认1秒
     workerExecutor.scheduleWithFixedDelay(new BackgroundWorker(this),
         this.checkpointInterval, this.checkpointInterval,
         TimeUnit.MILLISECONDS);
@@ -388,11 +397,14 @@ public class Log {
    * Read checkpoint and data files from disk replaying them to the state
    * directly before the shutdown or crash.
    *
+   * 从磁盘读取检查点和数据文件，在关机或崩溃前直接重放它们到状态。
+   *
    * @throws IOException
    */
   void replay() throws IOException {
     Preconditions.checkState(!open, "Cannot replay after Log has been opened");
 
+    //1，首先获取到checkpointDir的写锁
     lockExclusive();
     try {
       /*
@@ -410,6 +422,7 @@ public class Log {
         for (File file : LogUtils.getLogs(logDir)) {
           int id = LogUtils.getIDForFile(file);
           dataFiles.add(file);
+          //2，获取最大的fileID
           nextFileID.set(Math.max(nextFileID.get(), id));
           idLogFileMap.put(id, LogFileFactory.getRandomReader(new File(logDir,
               PREFIX + id), encryptionKeyProvider, fsyncPerTransaction));
@@ -501,13 +514,16 @@ public class Log {
       }
 
 
+      //3，读取log文件根据record的类型进行相应的操作，进行恢复；遍历所有的data目录
       for (int index = 0; index < logDirs.length; index++) {
         LOGGER.info("Rolling " + logDirs[index]);
         roll(index);
       }
 
+      //4，将queue刷新到相关文件
       /*
        * Now that we have replayed, write the current queue to disk
+       * 现在我们已经重播了，将当前队列写入磁盘
        */
       writeCheckpoint(true);
 
@@ -646,8 +662,10 @@ public class Log {
   FlumeEventPointer put(long transactionID, Event event)
       throws IOException {
     Preconditions.checkState(open, "Log is closed");
+    // 构建FlumeEvent对象
     FlumeEvent flumeEvent = new FlumeEvent(
         event.getHeaders(), event.getBody());
+    // 原子递增创建Put
     Put put = new Put(transactionID, WriteOrderOracle.next(), flumeEvent);
     ByteBuffer buffer = TransactionEventRecord.toByteBuffer(put);
     int logFileIndex = nextLogWriter(transactionID);
@@ -820,6 +838,8 @@ public class Log {
   /**
    * Synchronization not required since this method gets the write lock,
    * so checkpoint and this method cannot run at the same time.
+   *
+   * 由于该方法获得写锁，所以不需要同步，因此检查点和该方法不能同时运行。
    */
   void close() throws IOException {
     lockExclusive();
@@ -905,6 +925,7 @@ public class Log {
   private void commit(long transactionID, short type) throws IOException {
     Preconditions.checkState(open, "Log is closed");
     Commit commit = new Commit(transactionID, WriteOrderOracle.next(), type);
+    // 封装成ByteBuffer
     ByteBuffer buffer = TransactionEventRecord.toByteBuffer(commit);
     int logFileIndex = nextLogWriter(transactionID);
     long usableSpace = logFiles.get(logFileIndex).getUsableSpace();
@@ -943,6 +964,7 @@ public class Log {
 
   /**
    * Atomic so not synchronization required.
+   * 原子的，所以不需要同步。
    *
    * @return
    */
@@ -1023,6 +1045,10 @@ public class Log {
    * write lock. So this method gets exclusive access to all the
    * data structures this method accesses.
    *
+   *
+   * 写入当前检查点对象，然后交换对象，以便下一个检查点发生在另一个检查点目录上。
+   * 不需要同步，因为这个方法需要一个写锁。所以这个方法独占访问所有的数据结构。
+   *
    * @param force a flag to force the writing of checkpoint
    * @throws IOException if we are unable to write the checkpoint out to disk
    */
@@ -1046,6 +1072,9 @@ public class Log {
         //fileID set from the queue have been updated.
         //Since clone is smarter than insert, better to make
         //a copy of the set first so that we can use it later.
+        // 由于活动文件也可能在队列的fileid中，所以我们需要将每个文件移动到一个新的集合中，
+        // 或者像这里所做的那样删除每个文件。否则，就不能确保队列中的fileID集合中的每个元素都已更新。
+        // 因为克隆比插入更好，所以最好先对集合进行复制，以便以后使用。
         logFileRefCountsAll = queue.getFileIDs();
         logFileRefCountsActive = new TreeSet<Integer>(logFileRefCountsAll);
 
@@ -1102,6 +1131,7 @@ public class Log {
     //Do the deletes outside the checkpointWriterLock
     //Delete logic is expensive.
     if (open && checkpointCompleted) {
+      // 删除旧的日志
       removeOldLogs(logFileRefCountsActive);
     }
     //Since the exception is not caught, this will not be returned if
@@ -1156,6 +1186,11 @@ public class Log {
    * <p>
    * <p> If locking is supported we guarantee exclusive access to the
    * storage directory. Otherwise, no guarantee is given.
+   *
+   * 锁定存储以提供独占访问。
+   * 不是所有文件系统都支持锁定。
+   * 例如，NFS并不总是支持排他锁。
+   * 如果支持锁定，我们就保证对存储目录的独占访问。否则，不作任何保证。
    *
    * @throws IOException if locking fails
    */

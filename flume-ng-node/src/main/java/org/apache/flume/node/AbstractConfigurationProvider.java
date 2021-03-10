@@ -69,6 +69,7 @@ import com.google.common.collect.ListMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 
+// 主要负责完成三大组件的加载和初始化
 public abstract class AbstractConfigurationProvider implements ConfigurationProvider {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(AbstractConfigurationProvider.class);
@@ -83,6 +84,7 @@ public abstract class AbstractConfigurationProvider implements ConfigurationProv
   public AbstractConfigurationProvider(String agentName) {
     super();
     this.agentName = agentName;
+    // 默认工厂类
     this.sourceFactory = new DefaultSourceFactory();
     this.sinkFactory = new DefaultSinkFactory();
     this.channelFactory = new DefaultChannelFactory();
@@ -93,8 +95,11 @@ public abstract class AbstractConfigurationProvider implements ConfigurationProv
   protected abstract FlumeConfiguration getFlumeConfiguration();
 
   public MaterializedConfiguration getConfiguration() {
+    // source channel sink 实现
     MaterializedConfiguration conf = new SimpleMaterializedConfiguration();
+    // 读取客户端的配置文件信息
     FlumeConfiguration fconfig = getFlumeConfiguration();
+    // AgentName 外部命令传入
     AgentConfiguration agentConf = fconfig.getConfigurationFor(getAgentName());
     if (agentConf != null) {
       Map<String, ChannelComponent> channelComponentMap = Maps.newHashMap();

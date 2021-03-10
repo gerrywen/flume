@@ -56,6 +56,9 @@ public abstract class LogFile {
    * This class preallocates the data files 1MB at time to avoid
    * the updating of the inode on each write and to avoid the disk
    * filling up during a write. It's also faster, so there.
+   *
+   * 这个类每次预先分配1MB的数据文件，以避免每次写入时更新索引节点，
+   * 并避免写入期间磁盘被填满。它也更快，就这样。
    */
   private static final ByteBuffer FILL = DirectMemoryUtils.allocate(1024 * 1024);
 
@@ -171,7 +174,9 @@ public abstract class LogFile {
     private final int logFileID;
     private final File file;
     private final long maxFileSize;
+    // handle
     private final RandomAccessFile writeFileHandle;
+    // channel
     private final FileChannel writeFileChannel;
     private final CipherProvider.Encryptor encryptor;
     private final CachedFSUsableSpace usableSpace;
@@ -195,7 +200,9 @@ public abstract class LogFile {
       this.maxFileSize = Math.min(maxFileSize,
           FileChannelConfiguration.DEFAULT_MAX_FILE_SIZE);
       this.encryptor = encryptor;
+      // 文件读写
       writeFileHandle = new RandomAccessFile(file, "rw");
+      // 获取io读写通道
       writeFileChannel = writeFileHandle.getChannel();
       this.fsyncPerTransaction = fsyncPerTransaction;
       this.fsyncInterval = fsyncInterval;

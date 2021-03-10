@@ -115,16 +115,19 @@ public class FileChannel extends BasicChannelSemantics implements TransactionCap
   @Override
   public void configure(Context context) {
 
+    // useDualCheckpoints（是否需要备份检查点）
     useDualCheckpoints = context.getBoolean(
         FileChannelConfiguration.USE_DUAL_CHECKPOINTS,
         FileChannelConfiguration.DEFAULT_USE_DUAL_CHECKPOINTS);
 
+    // compressBackupCheckpoint（是否压缩备份节点）
     compressBackupCheckpoint = context.getBoolean(
         FileChannelConfiguration.COMPRESS_BACKUP_CHECKPOINT,
         FileChannelConfiguration.DEFAULT_COMPRESS_BACKUP_CHECKPOINT);
 
     String homePath = System.getProperty("user.home").replace('\\', '/');
 
+    // checkpointDir（检查点目录，默认在${user.home}目录下）
     String strCheckpointDir =
         context.getString(FileChannelConfiguration.CHECKPOINT_DIR,
             homePath + "/.flume/file-channel/checkpoint").trim();
@@ -132,6 +135,7 @@ public class FileChannel extends BasicChannelSemantics implements TransactionCap
     String strBackupCheckpointDir =
         context.getString(FileChannelConfiguration.BACKUP_CHECKPOINT_DIR, "").trim();
 
+    // dataDirs（数据节点目录）
     String[] strDataDirs = Iterables.toArray(
         Splitter.on(",").trimResults().omitEmptyStrings().split(
             context.getString(FileChannelConfiguration.DATA_DIRS,
@@ -152,15 +156,17 @@ public class FileChannel extends BasicChannelSemantics implements TransactionCap
        */
       Preconditions.checkState(!backupCheckpointDir.equals(checkpointDir),
           "Could not configure " + getName() + ". The checkpoint backup " +
-              "directory and the checkpoint directory are " +
+              "directory and the checkpoint directory   are " +
               "configured to be the same.");
     }
 
+    // 数据文件夹
     dataDirs = new File[strDataDirs.length];
     for (int i = 0; i < strDataDirs.length; i++) {
       dataDirs[i] = new File(strDataDirs[i]);
     }
 
+    // capacity（获取配置的容量）
     capacity = context.getInteger(FileChannelConfiguration.CAPACITY,
         FileChannelConfiguration.DEFAULT_CAPACITY);
     if (capacity <= 0) {
@@ -169,9 +175,11 @@ public class FileChannel extends BasicChannelSemantics implements TransactionCap
           + "default capacity of {}", capacity);
     }
 
+    // keepAlive（超时时间，就是如果channel中没有数据最长等待时间）
     keepAlive =
         context.getInteger(FileChannelConfiguration.KEEP_ALIVE,
             FileChannelConfiguration.DEFAULT_KEEP_ALIVE);
+    // transactionCapacity（事务的最大容量）
     transactionCapacity =
         context.getInteger(FileChannelConfiguration.TRANSACTION_CAPACITY,
             FileChannelConfiguration.DEFAULT_TRANSACTION_CAPACITY);
@@ -184,10 +192,12 @@ public class FileChannel extends BasicChannelSemantics implements TransactionCap
           "capacity of {}", transactionCapacity);
     }
 
+    // capacity的值一定要大于transactionCapacity，不然会报错
     Preconditions.checkState(transactionCapacity <= capacity,
         "File Channel transaction capacity cannot be greater than the " +
             "capacity of the channel.");
 
+    // checkpointInterval（log的检查间隔）
     checkpointInterval =
         context.getLong(FileChannelConfiguration.CHECKPOINT_INTERVAL,
             FileChannelConfiguration.DEFAULT_CHECKPOINT_INTERVAL);
@@ -201,20 +211,24 @@ public class FileChannel extends BasicChannelSemantics implements TransactionCap
     }
 
     // cannot be over FileChannelConfiguration.DEFAULT_MAX_FILE_SIZE
+    // maxFileSize（最大文件的大小，默认是1.5G）
     maxFileSize = Math.min(
         context.getLong(FileChannelConfiguration.MAX_FILE_SIZE,
             FileChannelConfiguration.DEFAULT_MAX_FILE_SIZE),
         FileChannelConfiguration.DEFAULT_MAX_FILE_SIZE);
 
+    // minimumRequiredSpace(最少需要多少空间，默认是500M)
     minimumRequiredSpace = Math.max(
         context.getLong(FileChannelConfiguration.MINIMUM_REQUIRED_SPACE,
             FileChannelConfiguration.DEFAULT_MINIMUM_REQUIRED_SPACE),
         FileChannelConfiguration.FLOOR_MINIMUM_REQUIRED_SPACE);
 
+    // useLogReplayV1（使用旧重放逻辑）
     useLogReplayV1 = context.getBoolean(
         FileChannelConfiguration.USE_LOG_REPLAY_V1,
         FileChannelConfiguration.DEFAULT_USE_LOG_REPLAY_V1);
 
+    // useFastReplay（不使用队列重放）
     useFastReplay = context.getBoolean(
         FileChannelConfiguration.USE_FAST_REPLAY,
         FileChannelConfiguration.DEFAULT_USE_FAST_REPLAY);
@@ -222,10 +236,13 @@ public class FileChannel extends BasicChannelSemantics implements TransactionCap
     Context encryptionContext = new Context(
         context.getSubProperties(EncryptionConfiguration.ENCRYPTION_PREFIX +
             "."));
+    // keyProvider（KEY供应商的类型，支持的类型：JCEKSFILE）
     String encryptionKeyProviderName = encryptionContext.getString(
         EncryptionConfiguration.KEY_PROVIDER);
+    // activeKey（用于加密新数据的密钥名称）
     encryptionActiveKey = encryptionContext.getString(
         EncryptionConfiguration.ACTIVE_KEY);
+    // cipherProvider（加密提供程序类型，支持的类型：AESCTRNOPADDING）
     encryptionCipherProvider = encryptionContext.getString(
         EncryptionConfiguration.CIPHER_PROVIDER);
     if (encryptionKeyProviderName != null) {
@@ -263,7 +280,9 @@ public class FileChannel extends BasicChannelSemantics implements TransactionCap
       queueRemaining = new Semaphore(capacity, true);
     }
     if (log != null) {
+      // 设置1秒检查
       log.setCheckpointInterval(checkpointInterval);
+      // 最大文件的大小，默认是1.5G
       log.setMaxFileSize(maxFileSize);
     }
 
@@ -278,11 +297,20 @@ public class FileChannel extends BasicChannelSemantics implements TransactionCap
     LOG.info("Starting {}...", this);
     channelCounter.start();
     try {
+      // 将configure方法获取到的参数，set到Builder对象
       Builder builder = createLogBuilder();
       log = builder.build();
+      //builder.build();方法通过Builder创建Log对象
+      //并且尝试获取checkpointDir和dataDir文件锁，Log类中的private void lock(File dir) throws IOException方法就是用来尝试过去锁的
+      //1，首先获取到checkpointDir的写锁
+      //2，获取最大的fileID
+      //3，读取log文件根据record的类型进行相应的操作，进行恢复；遍历所有的data目录
+      //4，将queue刷新到相关文件
       log.replay();
+      //表示打开channel
       setOpen(true);
 
+      // 获取FlumeEventQueue的大小
       int depth = getDepth();
       Preconditions.checkState(queueRemaining.tryAcquire(depth),
           "Unable to acquire " + depth + " permits " + channelNameDescriptor);
@@ -297,6 +325,7 @@ public class FileChannel extends BasicChannelSemantics implements TransactionCap
         throw (Error) t;
       }
     }
+    //计数器开始统计
     if (open) {
       channelCounter.setChannelSize(getDepth());
       channelCounter.setChannelCapacity(capacity);
@@ -492,6 +521,7 @@ public class FileChannel extends BasicChannelSemantics implements TransactionCap
 
     @Override
     protected void doPut(Event event) throws InterruptedException {
+      // channel.event.put.attempt
       channelCounter.incrementEventPutAttemptCount();
       if (putList.remainingCapacity() == 0) {
         throw new ChannelException("Put queue for FileBackedTransaction " +
@@ -509,23 +539,29 @@ public class FileChannel extends BasicChannelSemantics implements TransactionCap
             + channelNameDescriptor);
       }
       boolean success = false;
+      //获取checkpoint的读锁，doTake()方法也会获取读锁，所以doTake和doPut只能操作一个，无法同时操作。
       log.lockShared();
       try {
+        //transactionID是在TransactionIDOracle类中原子性递增的
+        //将Event写入数据文件，使用RandomAccessFile。数据会缓存到inflightputs文件中
         FlumeEventPointer ptr = log.put(transactionID, event);
+        // event 包装成FlumeEventPointer 放入putList
         Preconditions.checkState(putList.offer(ptr), "putList offer failed "
             + channelNameDescriptor);
+        //指针和事务ID加入到queue队列中。
         queue.addWithoutCommit(ptr, transactionID);
         success = true;
       } catch (IOException e) {
+        // channel.file.event.put.error
         channelCounter.incrementEventPutErrorCount();
         throw new ChannelException("Put failed due to IO error "
             + channelNameDescriptor, e);
       } finally {
-        log.unlockShared();
+        log.unlockShared();//释放读锁
         if (!success) {
           // release slot obtained in the case
           // the put fails for any reason
-          queueRemaining.release();
+          queueRemaining.release();//释放信号量
         }
       }
     }
@@ -539,7 +575,7 @@ public class FileChannel extends BasicChannelSemantics implements TransactionCap
             "increasing capacity, or increasing thread count. "
             + channelNameDescriptor);
       }
-      log.lockShared();
+      log.lockShared();//获取锁
       /*
        * 1. Take an event which is in the queue.
        * 2. If getting that event does not throw NoopRecordException,
@@ -550,6 +586,7 @@ public class FileChannel extends BasicChannelSemantics implements TransactionCap
 
       try {
         while (true) {
+          // //获取文件指针，ptr的数据结构是fileID和offset
           FlumeEventPointer ptr = queue.removeHead(transactionID);
           if (ptr == null) {
             return null;
@@ -561,6 +598,7 @@ public class FileChannel extends BasicChannelSemantics implements TransactionCap
                   "takeList offer failed "
                       + channelNameDescriptor);
               log.take(transactionID, ptr); // write take to disk
+              //根据文件指针，使用log对象在磁盘中获取到Event。数据会缓存到inflighttakes文件中
               Event event = log.get(ptr);
               return event;
             } catch (IOException e) {
@@ -583,7 +621,7 @@ public class FileChannel extends BasicChannelSemantics implements TransactionCap
           }
         }
       } finally {
-        log.unlockShared();
+        log.unlockShared();//释放锁
       }
     }
 
@@ -591,12 +629,14 @@ public class FileChannel extends BasicChannelSemantics implements TransactionCap
     protected void doCommit() throws InterruptedException {
       int puts = putList.size();
       int takes = takeList.size();
-      if (puts > 0) {
+      if (puts > 0) {//puts和takes不能同时都>0，其中有一个得是等于零
         Preconditions.checkState(takes == 0, "nonzero puts and takes "
             + channelNameDescriptor);
-        log.lockShared();
+        log.lockShared();//获取锁
         try {
+          //该操作会封装成一个ByteBuffer类型写入到文件，
           log.commitPut(transactionID);
+          // channel.event.put.success
           channelCounter.addToEventPutSuccessCount(puts);
           synchronized (queue) {
             while (!putList.isEmpty()) {
@@ -612,20 +652,21 @@ public class FileChannel extends BasicChannelSemantics implements TransactionCap
                 Preconditions.checkState(false, msg.toString());
               }
             }
+            //清空checkpoint文件夹中inflightputs和inflighttakes文件的内容
             queue.completeTransaction(transactionID);
           }
         } catch (IOException e) {
           throw new ChannelException("Commit failed due to IO error "
               + channelNameDescriptor, e);
         } finally {
-          log.unlockShared();
+          log.unlockShared();//释放锁
         }
 
       } else if (takes > 0) {
-        log.lockShared();
+        log.lockShared();//释放锁
         try {
-          log.commitTake(transactionID);
-          queue.completeTransaction(transactionID);
+          log.commitTake(transactionID);//写入data文件
+          queue.completeTransaction(transactionID);//和上面操作一样
           channelCounter.addToEventTakeSuccessCount(takes);
         } catch (IOException e) {
           throw new ChannelException("Commit failed due to IO error "
@@ -635,6 +676,7 @@ public class FileChannel extends BasicChannelSemantics implements TransactionCap
         }
         queueRemaining.release(takes);
       }
+      //清空两个队列
       putList.clear();
       takeList.clear();
       channelCounter.setChannelSize(queue.getSize());

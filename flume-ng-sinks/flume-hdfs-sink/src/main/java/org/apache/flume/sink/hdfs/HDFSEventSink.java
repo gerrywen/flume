@@ -112,8 +112,11 @@ public class HDFSEventSink extends AbstractSink implements Configurable, BatchSi
   private int rollTimerPoolSize;
   private CompressionCodec codeC;
   private CompressionType compType;
+  // 默认SequenceFile
   private String fileType;
+  // hdfs.path
   private String filePath;
+  // hdfs.filePrefix
   private String fileName;
   private String suffix;
   private String inUsePrefix;
@@ -361,33 +364,45 @@ public class HDFSEventSink extends AbstractSink implements Configurable, BatchSi
    * Ensure the file is open. Serialize the data and write it to the file on
    * HDFS. <br/>
    * This method is not thread safe.
+   *
+   * 将事件从通道中取出并发送到HDFS。每个事务最多获取批处理大小的事件。
+   * 找到事件对应的桶。确保文件已打开。将数据序列化并写入HDFS文件中。
+   * 此方法不是线程安全的。
    */
   public Status process() throws EventDeliveryException {
+    // 获取channel
     Channel channel = getChannel();
     Transaction transaction = channel.getTransaction();
+    // 开启事务
     transaction.begin();
     try {
       Set<BucketWriter> writers = new LinkedHashSet<>();
       int txnEventCount = 0;
       for (txnEventCount = 0; txnEventCount < batchSize; txnEventCount++) {
+        // 获取channel数据
         Event event = channel.take();
         if (event == null) {
           break;
         }
 
         // reconstruct the path name by substituting place holders
+        // 通过替换占位符重新构造路径名
         String realPath = BucketPath.escapeString(filePath, event.getHeaders(),
             timeZone, needRounding, roundUnit, roundValue, useLocalTime);
         String realName = BucketPath.escapeString(fileName, event.getHeaders(),
             timeZone, needRounding, roundUnit, roundValue, useLocalTime);
 
+        // DIRECTORY_DELIMITER = file.separator
         String lookupPath = realPath + DIRECTORY_DELIMITER + realName;
         BucketWriter bucketWriter;
         HDFSWriter hdfsWriter = null;
         // Callback to remove the reference to the bucket writer from the
         // sfWriters map so that all buffers used by the HDFS file
         // handles are garbage collected.
+        // 回调函数从sfWriters映射中移除对bucket writer的引用，
+        // 这样HDFS文件句柄所使用的缓冲区就会被垃圾回收。
         WriterCallback closeCallback = new WriterCallback() {
+          // bucketPath == onCloseCallbackPath
           @Override
           public void run(String bucketPath) {
             LOG.info("Writer callback called.");
@@ -408,6 +423,7 @@ public class HDFSEventSink extends AbstractSink implements Configurable, BatchSi
         }
 
         // Write the data to HDFS
+        // 写入数据到HDFS
         try {
           bucketWriter.append(event);
         } catch (BucketClosedException ex) {
@@ -423,6 +439,7 @@ public class HDFSEventSink extends AbstractSink implements Configurable, BatchSi
         }
 
         // track the buckets getting written in this transaction
+        // 跟踪写入该事务的buckets
         if (!writers.contains(bucketWriter)) {
           writers.add(bucketWriter);
         }
@@ -437,10 +454,11 @@ public class HDFSEventSink extends AbstractSink implements Configurable, BatchSi
       }
 
       // flush all pending buckets before committing the transaction
+      // 在提交事务之前刷新所有挂起的buckets
       for (BucketWriter bucketWriter : writers) {
         bucketWriter.flush();
       }
-
+      // 提交事务
       transaction.commit();
 
       if (txnEventCount < 1) {

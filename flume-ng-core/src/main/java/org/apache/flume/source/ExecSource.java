@@ -147,24 +147,38 @@ import java.nio.charset.Charset;
  * TODO
  * </p>
  */
+
+/**
+ * a1.sources = r1
+ * a1.channels = c1
+ * a1.sources.r1.type = exec
+ * a1.sources.r1.command = tail -F /var/log/secure
+ * a1.sources.r1.channels = c1
+ *
+ *
+ * a1.sources.tailsource-1.type = exec
+ * a1.sources.tailsource-1.shell = /bin/bash -c
+ * a1.sources.tailsource-1.command = for i in /path/*.txt; do cat $i; done
+ */
 public class ExecSource extends AbstractSource implements EventDrivenSource, Configurable,
         BatchSizeSupported {
 
   private static final Logger logger = LoggerFactory.getLogger(ExecSource.class);
 
-  private String shell;
-  private String command;
-  private SourceCounter sourceCounter;
-  private ExecutorService executor;
-  private Future<?> runnerFuture;
-  private long restartThrottle;
-  private boolean restart;
-  private boolean logStderr;
-  private Integer bufferCount;
-  private long batchTimeout;
-  private ExecRunnable runner;
-  private Charset charset;
+  private String shell;//exec执行的是shell
+  private String command;//exec执行的是command
+  private SourceCounter sourceCounter;//用于JMX查看的计数器
+  private ExecutorService executor;//具体的Exec执行器
+  private Future<?> runnerFuture;//Exec执行的结果Future
+  private long restartThrottle;//重新执行的间隔
+  private boolean restart;//判断是否命令一次执行成功后需要重新执行
+  private boolean logStderr;//是否输出stderr
+  private Integer bufferCount;//缓冲区数量
+  private long batchTimeout;//批量flush的timeout
+  private ExecRunnable runner;//具体命令的执行代码
+  private Charset charset;//编码
 
+  //重写了父类的start()方法
   @Override
   public void start() {
     logger.info("Exec source starting with command: {}", command);
@@ -172,6 +186,7 @@ public class ExecSource extends AbstractSource implements EventDrivenSource, Con
     // Start the counter before starting any threads that may access it.
     sourceCounter.start();
 
+    //单线程的执行器
     executor = Executors.newSingleThreadExecutor();
     runner = new ExecRunnable(shell, command, getChannelProcessor(), sourceCounter, restart,
                               restartThrottle, logStderr, bufferCount, batchTimeout, charset);
@@ -180,6 +195,7 @@ public class ExecSource extends AbstractSource implements EventDrivenSource, Con
     runnerFuture = executor.submit(runner);
 
     // Mark the Source as RUNNING.
+    //调用父类start()方法更改Source的状态为started
     super.start();
 
     logger.debug("Exec source started");
@@ -218,6 +234,7 @@ public class ExecSource extends AbstractSource implements EventDrivenSource, Con
         sourceCounter);
   }
 
+  //获取用户的flume-ng启动是配置文件中配置的参数
   @Override
   public void configure(Context context) {
     command = context.getString("command");
@@ -255,6 +272,7 @@ public class ExecSource extends AbstractSource implements EventDrivenSource, Con
     return bufferCount;
   }
 
+  //这个类是重点，包含了Flume怎么执行命令
   private static class ExecRunnable implements Runnable {
 
     public ExecRunnable(String shell, String command, ChannelProcessor channelProcessor,
@@ -278,7 +296,9 @@ public class ExecSource extends AbstractSource implements EventDrivenSource, Con
     private final SourceCounter sourceCounter;
     private volatile boolean restart;
     private final long restartThrottle;
+    // 默认20
     private final int bufferCount;
+    // default 3000 ms
     private long batchTimeout;
     private final boolean logStderr;
     private final Charset charset;
@@ -294,8 +314,10 @@ public class ExecSource extends AbstractSource implements EventDrivenSource, Con
         String exitCode = "unknown";
         BufferedReader reader = null;
         String line = null;
+        //从shell/command读取的内容的缓冲队列，定时刷新到channel
         final List<Event> eventList = new ArrayList<Event>();
 
+        //定时Flush从shell/command的输出到channel的executor
         timedFlushService = Executors.newSingleThreadScheduledExecutor(
                 new ThreadFactoryBuilder().setNameFormat(
                 "timedFlushExecService" +
@@ -303,27 +325,33 @@ public class ExecSource extends AbstractSource implements EventDrivenSource, Con
         try {
           if (shell != null) {
             String[] commandArgs = formulateShellCommand(shell, command);
+            //调用Runtime执行shell
             process = Runtime.getRuntime().exec(commandArgs);
           }  else {
             String[] commandArgs = command.split("\\s+");
+            //调用ProcessBuilder启动进程
             process = new ProcessBuilder(commandArgs).start();
           }
+          //获取进程的输出
           reader = new BufferedReader(
               new InputStreamReader(process.getInputStream(), charset));
 
           // StderrLogger dies as soon as the input stream is invalid
+          // 读取数据打印
           StderrReader stderrReader = new StderrReader(new BufferedReader(
               new InputStreamReader(process.getErrorStream(), charset)), logStderr);
           stderrReader.setName("StderrReader-[" + command + "]");
           stderrReader.setDaemon(true);
           stderrReader.start();
 
+          // 定时或者超时将数据写入channel
           future = timedFlushService.scheduleWithFixedDelay(new Runnable() {
               @Override
               public void run() {
                 try {
                   synchronized (eventList) {
                     if (!eventList.isEmpty() && timeout()) {
+                      //如果eventList不为空并且timeout，执行一次flush操作
                       flushEventBatch(eventList);
                     }
                   }
@@ -337,16 +365,21 @@ public class ExecSource extends AbstractSource implements EventDrivenSource, Con
           },
           batchTimeout, batchTimeout, TimeUnit.MILLISECONDS);
 
+          // 读取数据写入列表
           while ((line = reader.readLine()) != null) {
+            // src.events.received
             sourceCounter.incrementEventReceivedCount();
             synchronized (eventList) {
+              // 将event数据放入列表
               eventList.add(EventBuilder.withBody(line.getBytes(charset)));
+              //如果缓冲size大于等于最大的缓冲量或者timeout了，直接触发flush
               if (eventList.size() >= bufferCount || timeout()) {
                 flushEventBatch(eventList);
               }
             }
           }
 
+          //最后一次性把没有flush的内容写入channel
           synchronized (eventList) {
             if (!eventList.isEmpty()) {
               flushEventBatch(eventList);
@@ -365,6 +398,7 @@ public class ExecSource extends AbstractSource implements EventDrivenSource, Con
               logger.error("Failed to close reader for exec source", ex);
             }
           }
+          // 做一些线程退出处理
           exitCode = String.valueOf(kill());
         }
         if (restart) {
@@ -382,12 +416,17 @@ public class ExecSource extends AbstractSource implements EventDrivenSource, Con
     }
 
     private void flushEventBatch(List<Event> eventList) {
+      // todo:批量写入channel
       channelProcessor.processEventBatch(eventList);
+      // src.events.accepted
       sourceCounter.addToEventAcceptedCount(eventList.size());
+      // 清空列表
       eventList.clear();
+      // 最后推送到channel的时间
       lastPushToChannel = systemClock.currentTimeMillis();
     }
 
+    //timeout 规则，当前时间距离上次flush时间毫秒数是否大于我们配置的batchTimeout
     private boolean timeout() {
       return (systemClock.currentTimeMillis() - lastPushToChannel) >= batchTimeout;
     }
@@ -403,6 +442,7 @@ public class ExecSource extends AbstractSource implements EventDrivenSource, Con
     public int kill() {
       if (process != null) {
         synchronized (process) {
+          //杀死进程
           process.destroy();
 
           try {
@@ -410,6 +450,7 @@ public class ExecSource extends AbstractSource implements EventDrivenSource, Con
 
             // Stop the Thread that flushes periodically
             if (future != null) {
+              //停止future
               future.cancel(true);
             }
 
@@ -417,6 +458,7 @@ public class ExecSource extends AbstractSource implements EventDrivenSource, Con
               timedFlushService.shutdown();
               while (!timedFlushService.isTerminated()) {
                 try {
+                  //停止定时flush线程
                   timedFlushService.awaitTermination(500, TimeUnit.MILLISECONDS);
                 } catch (InterruptedException e) {
                   logger.debug("Interrupted while waiting for exec executor service "
@@ -458,6 +500,7 @@ public class ExecSource extends AbstractSource implements EventDrivenSource, Con
             // There is no need to read 'line' with a charset
             // as we do not to propagate it.
             // It is in UTF-16 and would be printed in UTF-8 format.
+            //调用logger输出process的stderr
             logger.info("StderrLogger[{}] = '{}'", ++i, line);
           }
         }

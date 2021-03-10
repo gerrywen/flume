@@ -21,11 +21,15 @@ package org.apache.flume.conf;
  * This interface indicates that a component has a transaction capacity
  * and it is publicly available.
  *
+ * 该接口指示组件具有事务处理能力，并且是公开可用的。
+ *
  */
 public interface TransactionCapacitySupported {
 
   /**
    * Returns the transaction capacity
+   *
+   * 返回事务容量
    */
   long getTransactionCapacity();
 

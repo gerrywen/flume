@@ -51,6 +51,9 @@ public abstract class BasicChannelSemantics extends AbstractChannel {
    * initializization resources until just before the first
    * transaction begins.
    * </p>
+   *
+   * 在第一个getTransaction()请求时调用，同时在这个{@link Channel}实例上同步。
+   * 使用此方法可将初始化资源延迟到第一个事务开始之前。
    */
   protected void initialize() {}
 
@@ -62,6 +65,9 @@ public abstract class BasicChannelSemantics extends AbstractChannel {
    * retrieved by <code>getTransaction</code> for the duration of that
    * transaction.
    * </p>
+   *
+   * 用于创建新的{@link Transaction}对象，该对象必须扩展{@link BasicTransactionSemantics}。
+   * 每个对象仅用于一个事务，但存储在线程本地，并在事务期间由<code>getTransaction</code>检索。
    */
   protected abstract BasicTransactionSemantics createTransaction();
 
@@ -71,6 +77,8 @@ public abstract class BasicChannelSemantics extends AbstractChannel {
    * delegates the <code>put</code> to the thread's {@link
    * BasicTransactionSemantics} instance.
    * </p>
+   *
+   * 确保该线程存在一个事务，然后将<code>put</code>委托给该线程的{@link BasicTransactionSemantics}实例。
    */
   @Override
   public void put(Event event) throws ChannelException {
@@ -86,6 +94,8 @@ public abstract class BasicChannelSemantics extends AbstractChannel {
    * delegates the <code>take</code> to the thread's {@link
    * BasicTransactionSemantics} instance.
    * </p>
+   *
+   * 确保该线程存在一个事务，然后将<code>take</code>委托给该线程的{@link BasicTransactionSemantics}实例。
    */
   @Override
   public Event take() throws ChannelException {
@@ -103,6 +113,10 @@ public abstract class BasicChannelSemantics extends AbstractChannel {
    * @return the current <code>Transaction</code> object for the
    *     calling thread
    * </p>
+   *
+   * 初始化通道(如果通道还没有打开)，然后检查该线程是否有一个打开的事务，
+   * 如果没有，则通过<code>createTransaction</code>创建一个新的事务。
+   * @return当前调用线程的<code>事务</code>对象
    */
   @Override
   public Transaction getTransaction() {

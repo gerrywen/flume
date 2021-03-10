@@ -166,6 +166,7 @@ import org.slf4j.LoggerFactory;
  *
  * @see java.util.Properties#load(java.io.Reader)
  */
+// 负责加载配置文件信息
 public class PropertiesFileConfigurationProvider extends
     AbstractConfigurationProvider {
 
@@ -180,6 +181,7 @@ public class PropertiesFileConfigurationProvider extends
     this.file = file;
   }
 
+  // 获取配置文件
   @Override
   public FlumeConfiguration getFlumeConfiguration() {
     BufferedReader reader = null;

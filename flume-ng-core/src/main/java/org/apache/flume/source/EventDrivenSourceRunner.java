@@ -40,7 +40,9 @@ public class EventDrivenSourceRunner extends SourceRunner {
   public void start() {
     Source source = getSource();
     ChannelProcessor cp = source.getChannelProcessor();
+    //初始化ChannelProcessor，实际上就是初始化拦截链的所有的拦截器
     cp.initialize();
+    //启动Source
     source.start();
     lifecycleState = LifecycleState.START;
   }
